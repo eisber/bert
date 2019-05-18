@@ -194,13 +194,17 @@ class DataProcessor(object):
     raise NotImplementedError()
 
   @classmethod
-  def _read_tsv(cls, input_file, quotechar=None):
+  def _read_tsv(cls, input_file, quotechar=None, maxLines=0):
     """Reads a tab separated value file."""
     with tf.gfile.Open(input_file, "r") as f:
       reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
       lines = []
+      i = 0
       for line in reader:
         lines.append(line)
+        i = i + 1
+        if maxLines > 0 and i > maxLines:
+          return lines
       return lines
 
 
@@ -332,6 +336,44 @@ class MrpcProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
 
+class BertiProcessor(DataProcessor):
+  """Processor for the Berti data set."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "train-2019-05-13.tsv/part-00000-a15961b3-f84c-4d0c-bf7c-2d57e1dbd441-c000.csv"), maxLines=10000), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "test-2019-05-13.tsv/part-00000-e15cb047-ce0d-45a1-88d3-5f6163f20e6f-c000.csv"), maxLines=10000), "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "test-2019-05-13.tsv/part-00000-e15cb047-ce0d-45a1-88d3-5f6163f20e6f-c000.csv"), maxLines=10000), "test")
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      if i == 0:
+        continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line[1])
+      text_b = tokenization.convert_to_unicode(line[2])
+      if set_type == "test":
+        label = "0"
+      else:
+        label = tokenization.convert_to_unicode(line[0])
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+    return examples
 
 class ColaProcessor(DataProcessor):
   """Processor for the CoLA data set (GLUE version)."""
@@ -339,12 +381,12 @@ class ColaProcessor(DataProcessor):
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+        self._read_tsv(os.path.join(data_dir, "train.tsv"), 1000), "train")
 
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+        self._read_tsv(os.path.join(data_dir, "dev.tsv"), 100), "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
@@ -788,6 +830,7 @@ def main(_):
       "mnli": MnliProcessor,
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
+      "berti": BertiProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
